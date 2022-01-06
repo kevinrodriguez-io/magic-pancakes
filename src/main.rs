@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod state;
+pub mod tools;
 use commands as Commands;
 use clap::{/*AppSettings, */ Parser, Subcommand};
 
