@@ -1,11 +1,11 @@
 pub mod commands;
 pub mod state;
 pub mod tools;
+use clap::{Parser, Subcommand};
 use commands as Commands;
-use clap::{/*AppSettings, */ Parser, Subcommand};
 
 #[derive(Parser)]
-#[clap(name = "pancakes")]
+#[clap(name = "pancakes", about, version, author)]
 struct Cli {
     #[clap(subcommand)]
     command: ProgramCommand,
@@ -15,18 +15,20 @@ struct Cli {
 enum ProgramCommand {
     #[clap()]
     Generate {
-        #[clap(required = true)]
+        #[clap(required = true, short, long)]
         amount: u32,
-        #[clap(required = true)]
+        #[clap(required = true, short, long)]
         json_template_path: String,
-        #[clap(required = true)]
-        layers_config_path: String,
-        #[clap(required = true)]
+        #[clap(required = true, short, long)]
+        config_path: String,
+        #[clap(required = true, short, long)]
         layers_path: String,
-        #[clap(required = true)]
+        #[clap(required = true, short, long)]
         output_path: String,
-        #[clap(required = true)]
-        output_format: String,
+        #[clap(required = true, short, long)]
+        format: String,
+        #[clap(required = false, short, long)]
+        threads: Option<String>,
     },
 }
 
@@ -36,18 +38,20 @@ fn main() {
         ProgramCommand::Generate {
             amount,
             json_template_path,
-            layers_config_path,
+            config_path,
             layers_path,
             output_path,
-            output_format
+            format,
+            threads,
         } => {
             Commands::generate::exec(
                 amount,
                 json_template_path,
-                layers_config_path,
+                config_path,
                 layers_path,
                 output_path,
-                output_format
+                format,
+                threads,
             );
         }
     }

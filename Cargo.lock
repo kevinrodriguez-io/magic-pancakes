@@ -365,6 +365,7 @@ dependencies = [
  "anyhow",
  "clap",
  "image",
+ "num_cpus",
  "rand",
  "serde",
  "serde_derive",

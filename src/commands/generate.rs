@@ -9,9 +9,9 @@ use image::imageops;
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use serde_json::from_str;
-use std::collections::HashMap;
 use std::path::Path;
-use std::{fs, path};
+use std::{collections::HashMap, sync::atomic::AtomicU32};
+use std::{fs, path, sync::Arc};
 
 fn read_json_template(json_template_path: &String) -> Result<Metadata> {
     let json_template_str = fs::read_to_string(json_template_path)?;
@@ -45,7 +45,7 @@ fn pick_layers(
 }
 
 fn get_picked_layer_item_uri(layers_path: &String, layer_name: &String, item: &String) -> String {
-    layers_path.clone() + "/" + &layer_name + "/" + &item
+    format!("{}/{}/{}.png", layers_path, layer_name, item)
 }
 
 fn get_picked_layer_item_uris(
@@ -67,24 +67,32 @@ fn build_image(
     output_path: &String,
     file_name_no_ext: &String,
     items: Vec<LayerItem>,
+    output_format: &String,
 ) -> Result<String> {
+    let format = match output_format.as_str() {
+        "png" => image::ImageFormat::Png,
+        "jpg" => image::ImageFormat::Jpeg,
+        "webp" => image::ImageFormat::WebP,
+        _ => image::ImageFormat::Png,
+    };
     let result = match items.len() {
         0 => Err(anyhow::anyhow!("No layers to build image from")),
         1 => {
             let item = &items[0];
-            let path = output_path.to_owned() + "/" + file_name_no_ext + ".jpeg";
-            image::open(path::Path::new(&item.uri))?
-                .save_with_format(path.clone(), image::ImageFormat::Jpeg)?;
+            let path = output_path.to_owned() + "/" + file_name_no_ext + "." + output_format;
+            image::open(path::Path::new(&item.uri))?.save_with_format(path.clone(), format)?;
             Ok(path)
         }
         _ => {
-            let mut base_image = image::open(path::Path::new(&items[0].uri))?;
+            let base_path = path::Path::new(&items[0].uri);
+            let mut base_image = image::open(base_path)?;
             for i in 1..items.len() {
-                let current_layer = image::open(path::Path::new(&items[i].uri))?;
+                let item_path = path::Path::new(&items[i].uri);
+                let current_layer = image::open(item_path)?;
                 imageops::overlay(&mut base_image, &current_layer, 0, 0);
             }
-            let path = output_path.to_owned() + "/" + file_name_no_ext + ".jpeg";
-            base_image.save_with_format(path.clone(), image::ImageFormat::Jpeg)?;
+            let path = output_path.to_owned() + "/" + file_name_no_ext + "." + output_format;
+            base_image.save_with_format(path.clone(), format)?;
             Ok(path)
         }
     };
@@ -119,10 +127,16 @@ fn generate_item(
     file_name_no_ext: &String,
     output_path: &String,
     json_template: &Metadata,
+    output_format: &String,
 ) -> Result<(Metadata, String, String)> {
     let picked_layers = pick_layers(layers_config)?;
     let picked_layer_items = get_picked_layer_item_uris(layers_path, picked_layers);
-    let image_path = build_image(output_path, &file_name_no_ext, picked_layer_items.clone())?;
+    let image_path = build_image(
+        output_path,
+        &file_name_no_ext,
+        picked_layer_items.clone(),
+        &output_format,
+    )?;
     let (metadata, json_path) = build_json(
         output_path,
         &file_name_no_ext,
@@ -139,7 +153,18 @@ pub fn exec(
     layers_path: &String,
     output_path: &String,
     output_format: &String,
+    unparsed_threads: &Option<String>,
 ) {
+    let threads = match unparsed_threads {
+        Some(threads) => match threads.parse::<usize>() {
+            Ok(threads) => threads,
+            Err(_) => {
+                eprintln!("Could not parse threads argument");
+                std::process::exit(1);
+            }
+        },
+        None => num_cpus::get(),
+    };
     let json_template = match read_json_template(json_template_path) {
         Ok(result) => result,
         Err(e) => panic!("Error reading JSON Template: {}", e),
@@ -152,16 +177,19 @@ pub fn exec(
         Err(e) => panic!("Error mkdirp {}", e),
         _ => (),
     };
+    let completed: Arc<AtomicU32> = Arc::new(AtomicU32::new(0));
     for i in 0..*amount {
+        println!("🛠 Generating item {}", i);
         match generate_item(
             &layers_config,
             layers_path,
             &i.to_string(),
             output_path,
             &json_template,
+            &output_format,
         ) {
-            Err(e) => panic!("Error building item {}: {}", i, e),
-            _ => (),
+            Err(e) => panic!("❌ Error building item {}: {}", i, e),
+            _ => println!("✅ Generated item {}", i),
         }
     }
 }
