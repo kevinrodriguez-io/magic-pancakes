@@ -14,13 +14,14 @@ use image::{
     png::{CompressionType, FilterType},
     ImageFormat,
 };
-use pbr::ProgressBar;
-use rand::distributions::WeightedIndex;
-use rand::prelude::*;
+use rand::{distributions::WeightedIndex, prelude::*};
 use serde_json::from_str;
-use std::collections::HashMap;
-use std::path::Path;
-use std::{fs, path, sync::mpsc::channel};
+use std::{collections::HashMap, sync::atomic::AtomicU32};
+use std::{fs, path};
+use std::{
+    path::Path,
+    sync::{atomic::Ordering, Arc},
+};
 use threadpool::ThreadPool;
 
 fn read_json_template(json_template_path: &String) -> Result<Metadata> {
@@ -259,11 +260,9 @@ pub fn exec(
 
     println!("🪡 Building Thread Pool...");
     let pool = ThreadPool::new(threads);
-    let (tx, rx) = channel();
 
     println!("🚀 Ready to go!");
-    let mut pb = ProgressBar::new(amount as u64);
-    pb.message("Building json/image pairs");
+    let completed = Arc::new(AtomicU32::new(0));
 
     for i in 0..amount {
         /*
@@ -279,10 +278,10 @@ pub fn exec(
         let quality = quality.clone();
         let compression = compression.clone();
         let filter = filter.clone();
+        let completed = completed.clone();
 
-        let tx = tx.clone();
         pool.execute(move || {
-            match tx.send(generate_item(
+            match generate_item(
                 layers_config,
                 json_template,
                 &layers_path,
@@ -292,16 +291,14 @@ pub fn exec(
                 quality,
                 compression,
                 filter,
-            )) {
-                Ok(_) => (),
-                Err(e) => panic!("Error sending to channel: {}", e),
+            ) {
+                Ok(_) => {
+                    completed.fetch_add(1, Ordering::Relaxed);
+                    println!("🧵 {}/{}: {}", completed.load(Ordering::Relaxed), amount, i);
+                }
+                Err(e) => panic!("Error completing: {}", e),
             }
         });
     }
-    rx.iter().for_each(|result| match result {
-        Ok((_metadata, _image_path, _json_path)) => {
-            pb.inc();
-        }
-        Err(e) => panic!("Error generating item: {}", e),
-    });
+    pool.join();
 }
