@@ -1,6 +1,10 @@
 {
     "cSpell.words": [
+        "cpus",
         "imageops",
-        "mkdirp"
+        "mkdirp",
+        "nofilter",
+        "paeth",
+        "threadpool"
     ]
 }
