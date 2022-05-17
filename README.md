@@ -15,7 +15,7 @@ $ cargo install --path ./
 
 ## Notes
 
-With Magic Pancakes you can generate NFT art. It uses parallelization in rust and a very LightWeight ThreadPool,
+With Magic Pancakes you can generate NFT art. It uses parallelization in rust and a very lightweight ThreadPool,
 that runs 1 thread per core. It expects several things:
 
 1. Layers must be `.png` files, even the background ones.
